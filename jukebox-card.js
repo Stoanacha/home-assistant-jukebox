@@ -30,15 +30,17 @@ class JukeboxCard extends HTMLElement {
             this.onSpeakerSelect(entityId);
         });
 
-        this.config.entities.forEach((entityId, idx) => {
+        let tabsHtml = '';
+        this.config.entities.forEach((entityId) => {
             if (!hass.states[entityId]) {
                 console.log('Jukebox: No State for entity', entityId);
                 return;
             }
-            this._tabs.appendChild(this.buildSpeakerSwitch(entityId, hass));
+            const name = hass.states[entityId].attributes.friendly_name || entityId;
+            tabsHtml += `<mwc-tab label="${name}"></mwc-tab>`;
         });
+        this._tabs.innerHTML = tabsHtml;
 
-        // automatically activate the first speaker that's playing
         const firstPlayingSpeakerIndex = this.findFirstPlayingIndex(hass);
         this._selectedSpeaker = this.config.entities[firstPlayingSpeakerIndex];
         this._tabs.activeIndex = firstPlayingSpeakerIndex;
