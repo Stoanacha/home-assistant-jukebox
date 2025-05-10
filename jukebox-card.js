@@ -1,3 +1,10 @@
+if (!customElements.get('mwc-tab')) {
+  import('https://unpkg.com/@material/mwc-tab@0.25.3/mwc-tab.js?module');
+}
+if (!customElements.get('mwc-tab-bar')) {
+  import('https://unpkg.com/@material/mwc-tab-bar@0.25.3/mwc-tab-bar.js?module');
+}
+
 class JukeboxCard extends HTMLElement {
     set hass(hass) {
         if (!this.content) {
