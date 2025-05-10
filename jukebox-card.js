@@ -220,7 +220,13 @@ class JukeboxCard extends HTMLElement {
     buildSpeakerSwitch(entityId, hass) {
         const entity = hass.states[entityId];
         const tab = document.createElement('mwc-tab');
-        tab.label = entity.attributes.friendly_name;
+        const name = entity.attributes.friendly_name || entityId;
+        console.log("Add tab:", name);
+        tab.innerHTML = name;
+        customElements.whenDefined('mwc-tab').then(() => {
+            tab.label = name;
+            tab.setAttribute('label', name);
+        });
         return tab;
     }
 
