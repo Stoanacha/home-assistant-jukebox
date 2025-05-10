@@ -221,18 +221,18 @@ class JukeboxCard extends HTMLElement {
         const data = {
             entity_id: this._selectedSpeaker,
             media_content_id: e.currentTarget.stationUrl,
-            media_content_type: 'audio/mp4'
-        };
-        if (logo) {
-            data.extra = {
+            media_content_type: 'audio/mp4',
+            extra: {
                 metadata: {
                     metadataType: 3,
                     title: name,
-                    artist: 'Live Radio',
-                    images: [{ url: logo }]
+                    artist: "Live Radio",
+                    images: [
+                        { url: logo }
+                    ]
                 }
-            };
-        }
+            }
+        };
         this.hass.callService('media_player', 'play_media', data);
     }
 
