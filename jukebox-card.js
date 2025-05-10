@@ -62,7 +62,7 @@ class JukeboxCard extends HTMLElement {
         stationList.classList.add('station-list');
 
         this.config.links.forEach(linkCfg => {
-            const stationButton = this.buildStationSwitch(linkCfg.name, linkCfg.url)
+            const stationButton = this.buildStationSwitch(linkCfg.name, linkCfg.url, linkCfg.logo);
             this._stationButtons.push(stationButton);
             stationList.appendChild(stationButton);
         });
@@ -189,21 +189,51 @@ class JukeboxCard extends HTMLElement {
         })
     }
 
-    buildStationSwitch(name, url) {
+    buildStationSwitch(name, url, logo) {
         const btn = document.createElement('mwc-button');
         btn.stationUrl = url;
+        btn.stationName = name;
+        btn.stationLogo = logo;
         btn.className = 'juke-toggle';
-        btn.innerText = name;
+        // Add logo image if present
+        if (logo) {
+            const img = document.createElement('img');
+            img.src = logo;
+            img.alt = name;
+            img.style.height = '20px';
+            img.style.width = '20px';
+            img.style.verticalAlign = 'middle';
+            img.style.marginRight = '8px';
+            btn.appendChild(img);
+        }
+        // Add station name
+        const span = document.createElement('span');
+        span.innerText = name;
+        btn.appendChild(span);
         btn.addEventListener('click', this.onStationSelect.bind(this));
         return btn;
     }
 
     onStationSelect(e) {
-        this.hass.callService('media_player', 'play_media', {
+        // Support logo/metadata for play_media
+        const logo = e.currentTarget.stationLogo;
+        const name = e.currentTarget.stationName;
+        const data = {
             entity_id: this._selectedSpeaker,
             media_content_id: e.currentTarget.stationUrl,
             media_content_type: 'audio/mp4'
-        });
+        };
+        if (logo) {
+            data.extra = {
+                metadata: {
+                    metadataType: 3,
+                    title: name,
+                    artist: 'Live Radio',
+                    images: [{ url: logo }]
+                }
+            };
+        }
+        this.hass.callService('media_player', 'play_media', data);
     }
 
     setVolume(value) {
@@ -301,9 +331,16 @@ function getStyle() {
     }
     
     .speaker-btn {
-        margin: 5px;
+        margin: 0 4px 0 0;
+        padding: 0 8px;
+        min-width: 0;
     }
             
+    mwc-button.juke-toggle img {
+        border-radius: 3px;
+        background: #222;
+    }
+    
     `;
 
     frag.appendChild(included);
