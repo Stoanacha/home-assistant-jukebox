@@ -23,9 +23,10 @@ class JukeboxCard extends HTMLElement {
 
     buildSpeakerSwitches(hass) {
         const tabs = document.createElement('ha-tabs');
-        tabs.addEventListener('selected', (e) => {
-            const idx = tabs.selected;
+        tabs.addEventListener('iron-activate', (e) => {
+            const idx = e.detail.selected;
             const entityId = this.config.entities[idx];
+            console.log("Tab selected:", idx, entityId);
             this.onSpeakerSelect(entityId);
         });
 
