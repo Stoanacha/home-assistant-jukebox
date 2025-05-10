@@ -26,7 +26,8 @@ class JukeboxCard extends HTMLElement {
         container.className = 'speaker-switches';
         this._speakerButtons = [];
 
-        this.config.entities.forEach((entityId, idx) => {
+        this.config.entities.forEach((entityObj, idx) => {
+            const entityId = entityObj.id;
             if (!hass.states[entityId]) return;
             const name = hass.states[entityId].attributes.friendly_name || entityId;
             const btn = document.createElement('mwc-button');
@@ -46,7 +47,7 @@ class JukeboxCard extends HTMLElement {
 
         // Highlight the first playing speaker or the first one
         const firstPlayingSpeakerIndex = this.findFirstPlayingIndex(hass);
-        this._selectedSpeaker = this.config.entities[firstPlayingSpeakerIndex];
+        this._selectedSpeaker = this.config.entities[firstPlayingSpeakerIndex].id;
         if (this._speakerButtons[firstPlayingSpeakerIndex]) {
             this._speakerButtons.forEach(b => b.removeAttribute('raised'));
             this._speakerButtons[firstPlayingSpeakerIndex].setAttribute('raised', '');
@@ -81,54 +82,59 @@ class JukeboxCard extends HTMLElement {
         muteButton.icon = 'hass:volume-high';
         muteButton.isMute = false;
         muteButton.addEventListener('click', this.onMuteUnmute.bind(this));
-	const mbIcon = document.createElement('ha-icon');
-	mbIcon.icon = 'hass:volume-high';
-	muteButton.appendChild(mbIcon);
+        const mbIcon = document.createElement('ha-icon');
+        mbIcon.icon = 'hass:volume-high';
+        muteButton.appendChild(mbIcon);
+
+        // Step buttons
+        const minusBtn = document.createElement('mwc-button');
+        minusBtn.innerText = '-';
+        minusBtn.className = 'vol-step-btn';
+        minusBtn.addEventListener('click', () => this.changeVolumeStep(-1));
+        const plusBtn = document.createElement('mwc-button');
+        plusBtn.innerText = '+';
+        plusBtn.className = 'vol-step-btn';
+        plusBtn.addEventListener('click', () => this.changeVolumeStep(1));
 
         const slider = document.createElement('ha-slider');
-        slider.min = 0;
-        slider.max = 100;
-        slider.addEventListener('change', this.onChangeVolumeSlider.bind(this));
         slider.className = 'flex';
+        slider.addEventListener('change', this.onChangeVolumeSlider.bind(this));
 
-        const stopButton = document.createElement('ha-icon-button')
+        const stopButton = document.createElement('ha-icon-button');
         stopButton.icon = 'hass:stop';
         stopButton.setAttribute('disabled', true);
         stopButton.addEventListener('click', this.onStop.bind(this));
-	const sbIcon = document.createElement('ha-icon');
-	sbIcon.icon = 'hass:stop';
-	stopButton.appendChild(sbIcon);
-
+        const sbIcon = document.createElement('ha-icon');
+        sbIcon.icon = 'hass:stop';
+        stopButton.appendChild(sbIcon);
 
         this._hassObservers.push(hass => {
-            if (!this._selectedSpeaker || !hass.states[this._selectedSpeaker]) {
-                return;
-            }
-            const speakerState = hass.states[this._selectedSpeaker].attributes;
+            if (!this._selectedSpeaker) return;
+            const entityObj = this.config.entities.find(e => e.id === this._selectedSpeaker);
+            const maxVol = entityObj && entityObj.max_volume !== undefined ? entityObj.max_volume : 100;
+            slider.min = 0;
+            slider.max = maxVol;
 
+            const speakerState = hass.states[this._selectedSpeaker]?.attributes || {};
             // no speaker level? then hide mute button and volume
             if (!speakerState.hasOwnProperty('volume_level')) {
                 slider.setAttribute('hidden', true);
-                stopButton.setAttribute('hidden', true)
+                stopButton.setAttribute('hidden', true);
             } else {
                 slider.removeAttribute('hidden');
-                stopButton.removeAttribute('hidden')
+                stopButton.removeAttribute('hidden');
             }
-
             if (!speakerState.hasOwnProperty('is_volume_muted')) {
                 muteButton.setAttribute('hidden', true);
             } else {
                 muteButton.removeAttribute('hidden');
             }
-
             if (hass.states[this._selectedSpeaker].state === 'playing') {
                 stopButton.removeAttribute('disabled');
             } else {
                 stopButton.setAttribute('disabled', true);
             }
-
-            slider.value = speakerState.volume_level ? speakerState.volume_level * 100 : 0;
-
+            slider.value = speakerState.volume_level ? Math.round(speakerState.volume_level * slider.max) : 0;
             if (speakerState.is_volume_muted && !slider.disabled) {
                 slider.disabled = true;
                 muteButton.icon = 'hass:volume-off';
@@ -140,8 +146,23 @@ class JukeboxCard extends HTMLElement {
             }
         });
 
+        // Set default volume on speaker select
+        this._hassObservers.push(hass => {
+            if (!this._selectedSpeaker) return;
+            const entityObj = this.config.entities.find(e => e.id === this._selectedSpeaker);
+            const defaultVol = entityObj && entityObj.default_volume !== undefined ? entityObj.default_volume : 10;
+            const maxVol = entityObj && entityObj.max_volume !== undefined ? entityObj.max_volume : 100;
+            const speakerState = hass.states[this._selectedSpeaker]?.attributes || {};
+            if (speakerState.volume_level === undefined) {
+                slider.value = defaultVol;
+                this.setVolume(defaultVol / maxVol);
+            }
+        });
+
         volumeContainer.appendChild(muteButton);
+        volumeContainer.appendChild(minusBtn);
         volumeContainer.appendChild(slider);
+        volumeContainer.appendChild(plusBtn);
         volumeContainer.appendChild(stopButton);
         return volumeContainer;
     }
@@ -251,8 +272,8 @@ class JukeboxCard extends HTMLElement {
      * @private
      */
     findFirstPlayingIndex(hass) {
-        return Math.max(0, this.config.entities.findIndex(entityId => {
-            return hass.states[entityId] && hass.states[entityId].state === 'playing';
+        return Math.max(0, this.config.entities.findIndex(entityObj => {
+            return hass.states[entityObj.id] && hass.states[entityObj.id].state === 'playing';
         }));
     }
 
@@ -260,11 +281,29 @@ class JukeboxCard extends HTMLElement {
         if (!config.entities) {
             throw new Error('You need to define your media player entities');
         }
-        this.config = config;
+        // Support both array of strings and array of objects for entities
+        this.config = { ...config };
+        this.config.entities = config.entities.map(e => {
+            if (typeof e === 'string') {
+                return { id: e };
+            }
+            return e;
+        });
     }
 
     getCardSize() {
         return 3;
+    }
+
+    changeVolumeStep(step) {
+        const entityObj = this.config.entities.find(e => e.id === this._selectedSpeaker);
+        const maxVol = entityObj && entityObj.max_volume !== undefined ? entityObj.max_volume : 100;
+        const slider = this.content.querySelector('ha-slider');
+        if (!slider) return;
+        let newVal = Number(slider.value) + step;
+        newVal = Math.max(slider.min, Math.min(slider.max, newVal));
+        slider.value = newVal;
+        this.setVolume(newVal / maxVol);
     }
 }
 
@@ -339,6 +378,12 @@ function getStyle() {
     mwc-button.juke-toggle img {
         border-radius: 3px;
         background: #222;
+    }
+    
+    .vol-step-btn {
+        min-width: 32px;
+        padding: 0 4px;
+        margin: 0 2px;
     }
     
     `;
