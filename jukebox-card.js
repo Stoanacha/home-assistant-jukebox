@@ -100,6 +100,46 @@ class JukeboxCard extends HTMLElement {
         slider.className = 'flex';
         slider.addEventListener('change', this.onChangeVolumeSlider.bind(this));
 
+        // Tooltip for current volume
+        const tooltip = document.createElement('div');
+        tooltip.className = 'vol-tooltip';
+        tooltip.style.display = 'none';
+        tooltip.innerText = '0';
+        volumeContainer.appendChild(tooltip);
+
+        // Show tooltip on drag or hover
+        function updateTooltipPosition() {
+            const rect = slider.getBoundingClientRect();
+            const percent = (slider.value - slider.min) / (slider.max - slider.min);
+            const left = rect.left + percent * rect.width;
+            tooltip.style.left = `${left - rect.left}px`;
+        }
+        slider.addEventListener('input', () => {
+            tooltip.innerText = slider.value;
+            tooltip.style.display = 'block';
+            updateTooltipPosition();
+        });
+        slider.addEventListener('mousedown', () => {
+            tooltip.style.display = 'block';
+            updateTooltipPosition();
+        });
+        slider.addEventListener('touchstart', () => {
+            tooltip.style.display = 'block';
+            updateTooltipPosition();
+        });
+        slider.addEventListener('mouseup', () => {
+            tooltip.style.display = 'none';
+        });
+        slider.addEventListener('touchend', () => {
+            tooltip.style.display = 'none';
+        });
+        slider.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+        });
+        slider.addEventListener('mousemove', () => {
+            if (tooltip.style.display === 'block') updateTooltipPosition();
+        });
+
         const stopButton = document.createElement('ha-icon-button');
         stopButton.icon = 'hass:stop';
         stopButton.setAttribute('disabled', true);
@@ -135,15 +175,7 @@ class JukeboxCard extends HTMLElement {
                 stopButton.setAttribute('disabled', true);
             }
             slider.value = speakerState.volume_level ? Math.round(speakerState.volume_level * slider.max) : 0;
-            if (speakerState.is_volume_muted && !slider.disabled) {
-                slider.disabled = true;
-                muteButton.icon = 'hass:volume-off';
-                muteButton.isMute = true;
-            } else if (!speakerState.is_volume_muted && slider.disabled) {
-                slider.disabled = false;
-                muteButton.icon = 'hass:volume-high';
-                muteButton.isMute = false;
-            }
+            tooltip.innerText = slider.value;
         });
 
         // Set default volume on speaker select
@@ -155,6 +187,7 @@ class JukeboxCard extends HTMLElement {
             const speakerState = hass.states[this._selectedSpeaker]?.attributes || {};
             if (speakerState.volume_level === undefined) {
                 slider.value = defaultVol;
+                tooltip.innerText = defaultVol;
                 this.setVolume(defaultVol / maxVol);
             }
         });
@@ -173,8 +206,10 @@ class JukeboxCard extends HTMLElement {
     }
 
     onChangeVolumeSlider(e) {
-        const volPercentage = parseFloat(e.currentTarget.value);
-        const vol = (volPercentage > 0 ? volPercentage / 100 : 0);
+        const slider = e.currentTarget;
+        const volPercentage = parseFloat(slider.value);
+        const maxVol = slider.max ? parseFloat(slider.max) : 100;
+        const vol = (volPercentage > 0 ? volPercentage / maxVol : 0);
         this.setVolume(vol);
     }
 
@@ -347,6 +382,9 @@ function getStyle() {
     
     .volume {
         padding: 10px 20px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
     
     mwc-button.juke-toggle {
@@ -384,8 +422,34 @@ function getStyle() {
         min-width: 32px;
         padding: 0 4px;
         margin: 0 2px;
+        color: #fff;
+        font-weight: bold;
+        font-size: 1.3em;
+        background: none;
+        box-shadow: none;
     }
-    
+    .vol-step-btn[raised] {
+        background: var(--primary-color);
+        color: var(--text-primary-color);
+    }
+    .volume ha-icon-button {
+        margin-right: 4px;
+    }
+    .volume ha-slider {
+        margin: 0 8px;
+    }
+    .vol-tooltip {
+        position: absolute;
+        top: -28px;
+        background: #222;
+        color: #fff;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 1em;
+        pointer-events: none;
+        z-index: 10;
+        transition: left 0.05s;
+    }
     `;
 
     frag.appendChild(included);
