@@ -23,6 +23,12 @@ class JukeboxCard extends HTMLElement {
 
     buildSpeakerSwitches(hass) {
         const tabs = document.createElement('ha-tabs');
+        tabs.addEventListener('selected', (e) => {
+            const idx = tabs.selected;
+            const entityId = this.config.entities[idx];
+            this.onSpeakerSelect(entityId);
+        });
+
         this.config.entities.forEach((entityId) => {
             if (!hass.states[entityId]) return;
             const name = hass.states[entityId].attributes.friendly_name || entityId;
@@ -33,7 +39,7 @@ class JukeboxCard extends HTMLElement {
 
         const firstPlayingSpeakerIndex = this.findFirstPlayingIndex(hass);
         this._selectedSpeaker = this.config.entities[firstPlayingSpeakerIndex];
-        tabs.activeIndex = firstPlayingSpeakerIndex;
+        tabs.selected = firstPlayingSpeakerIndex;
 
         return tabs;
     }
@@ -207,19 +213,6 @@ class JukeboxCard extends HTMLElement {
         return Math.max(0, this.config.entities.findIndex(entityId => {
             return hass.states[entityId] && hass.states[entityId].state === 'playing';
         }));
-    }
-
-    buildSpeakerSwitch(entityId, hass) {
-        const entity = hass.states[entityId];
-        const tab = document.createElement('mwc-tab');
-        const name = entity.attributes.friendly_name || entityId;
-        console.log("Add tab:", name);
-        tab.innerHTML = name;
-        customElements.whenDefined('mwc-tab').then(() => {
-            tab.label = name;
-            tab.setAttribute('label', name);
-        });
-        return tab;
     }
 
     setConfig(config) {
