@@ -154,14 +154,19 @@ class JukeboxCard extends HTMLElement {
             const maxVol = entityObj && entityObj.max_volume !== undefined ? entityObj.max_volume : 100;
             slider.min = 0;
             slider.max = maxVol;
+            slider.step = 1;
 
             const speakerState = hass.states[this._selectedSpeaker]?.attributes || {};
-            // no speaker level? then hide mute button and volume
+            // no speaker level? then hide mute button, volume, and step buttons
             if (!speakerState.hasOwnProperty('volume_level')) {
                 slider.setAttribute('hidden', true);
+                minusBtn.setAttribute('hidden', true);
+                plusBtn.setAttribute('hidden', true);
                 stopButton.setAttribute('hidden', true);
             } else {
                 slider.removeAttribute('hidden');
+                minusBtn.removeAttribute('hidden');
+                plusBtn.removeAttribute('hidden');
                 stopButton.removeAttribute('hidden');
             }
             if (!speakerState.hasOwnProperty('is_volume_muted')) {
@@ -418,19 +423,19 @@ function getStyle() {
         background: #222;
     }
     
-    .vol-step-btn {
+    .volume .vol-step-btn {
         min-width: 32px;
         padding: 0 4px;
         margin: 0 2px;
-        color: #fff;
-        font-weight: bold;
+        color: #fff !important;
+        font-weight: bold !important;
         font-size: 1.3em;
         background: none;
         box-shadow: none;
     }
-    .vol-step-btn[raised] {
+    .volume .vol-step-btn[raised] {
         background: var(--primary-color);
-        color: var(--text-primary-color);
+        color: var(--text-primary-color) !important;
     }
     .volume ha-icon-button {
         margin-right: 4px;
