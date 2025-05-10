@@ -22,30 +22,20 @@ class JukeboxCard extends HTMLElement {
     }
 
     buildSpeakerSwitches(hass) {
-        this._tabs = document.createElement('mwc-tab-bar');
-        this._tabs.setAttribute('activeIndex', 0);
-        this._tabs.addEventListener('MDCTabBar:activated', (e) => {
-            const idx = e.detail.index;
-            const entityId = this.config.entities[idx];
-            this.onSpeakerSelect(entityId);
-        });
-
-        let tabsHtml = '';
+        const tabs = document.createElement('ha-tabs');
         this.config.entities.forEach((entityId) => {
-            if (!hass.states[entityId]) {
-                console.log('Jukebox: No State for entity', entityId);
-                return;
-            }
+            if (!hass.states[entityId]) return;
             const name = hass.states[entityId].attributes.friendly_name || entityId;
-            tabsHtml += `<mwc-tab label="${name}"></mwc-tab>`;
+            const tab = document.createElement('ha-tab');
+            tab.setAttribute('label', name);
+            tabs.appendChild(tab);
         });
-        this._tabs.innerHTML = tabsHtml;
 
         const firstPlayingSpeakerIndex = this.findFirstPlayingIndex(hass);
         this._selectedSpeaker = this.config.entities[firstPlayingSpeakerIndex];
-        this._tabs.activeIndex = firstPlayingSpeakerIndex;
+        tabs.activeIndex = firstPlayingSpeakerIndex;
 
-        return this._tabs;
+        return tabs;
     }
 
     buildStationList() {
