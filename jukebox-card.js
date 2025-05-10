@@ -22,27 +22,37 @@ class JukeboxCard extends HTMLElement {
     }
 
     buildSpeakerSwitches(hass) {
-        const tabs = document.createElement('ha-tabs');
-        tabs.addEventListener('iron-activate', (e) => {
-            const idx = e.detail.selected;
-            const entityId = this.config.entities[idx];
-            console.log("Tab selected:", idx, entityId);
-            this.onSpeakerSelect(entityId);
-        });
+        const container = document.createElement('div');
+        container.className = 'speaker-switches';
+        this._speakerButtons = [];
 
-        this.config.entities.forEach((entityId) => {
+        this.config.entities.forEach((entityId, idx) => {
             if (!hass.states[entityId]) return;
             const name = hass.states[entityId].attributes.friendly_name || entityId;
-            const tab = document.createElement('ha-tab');
-            tab.setAttribute('label', name);
-            tabs.appendChild(tab);
+            const btn = document.createElement('mwc-button');
+            btn.innerText = name;
+            btn.className = 'speaker-btn';
+            btn.addEventListener('click', () => {
+                this.onSpeakerSelect(entityId);
+                this._speakerButtons.forEach(b => b.removeAttribute('raised'));
+                btn.setAttribute('raised', '');
+            });
+            if (!this._selectedSpeaker && idx === 0) {
+                btn.setAttribute('raised', '');
+            }
+            this._speakerButtons.push(btn);
+            container.appendChild(btn);
         });
 
+        // Highlight the first playing speaker or the first one
         const firstPlayingSpeakerIndex = this.findFirstPlayingIndex(hass);
         this._selectedSpeaker = this.config.entities[firstPlayingSpeakerIndex];
-        tabs.selected = firstPlayingSpeakerIndex;
+        if (this._speakerButtons[firstPlayingSpeakerIndex]) {
+            this._speakerButtons.forEach(b => b.removeAttribute('raised'));
+            this._speakerButtons[firstPlayingSpeakerIndex].setAttribute('raised', '');
+        }
 
-        return tabs;
+        return container;
     }
 
     buildStationList() {
@@ -284,6 +294,14 @@ function getStyle() {
         background-color: var(--primary-color);
         color: var(--text-primary-color);
         --paper-tabs-selection-bar-color: var(--text-primary-color, #FFF);
+    }
+            
+    .speaker-switches {
+        margin: 10px;
+    }
+    
+    .speaker-btn {
+        margin: 5px;
     }
             
     `;
