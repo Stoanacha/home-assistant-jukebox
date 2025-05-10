@@ -98,6 +98,9 @@ class JukeboxCard extends HTMLElement {
 
         const slider = document.createElement('ha-slider');
         slider.className = 'flex';
+        slider.min = 0;
+        slider.max = 100;
+        slider.step = 1;
         slider.addEventListener('change', this.onChangeVolumeSlider.bind(this));
 
         // Tooltip for current volume
@@ -150,12 +153,6 @@ class JukeboxCard extends HTMLElement {
 
         this._hassObservers.push(hass => {
             if (!this._selectedSpeaker) return;
-            const entityObj = this.config.entities.find(e => e.id === this._selectedSpeaker);
-            const maxVol = entityObj && entityObj.max_volume !== undefined ? entityObj.max_volume : 100;
-            slider.min = 0;
-            slider.max = maxVol;
-            slider.step = 1;
-
             const speakerState = hass.states[this._selectedSpeaker]?.attributes || {};
             // no speaker level? then hide mute button, volume, and step buttons
             if (!speakerState.hasOwnProperty('volume_level')) {
@@ -179,7 +176,7 @@ class JukeboxCard extends HTMLElement {
             } else {
                 stopButton.setAttribute('disabled', true);
             }
-            slider.value = speakerState.volume_level ? Math.round(speakerState.volume_level * slider.max) : 0;
+            slider.value = speakerState.volume_level ? Math.round(speakerState.volume_level * 100) : 0;
             tooltip.innerText = slider.value;
         });
 
@@ -188,12 +185,11 @@ class JukeboxCard extends HTMLElement {
             if (!this._selectedSpeaker) return;
             const entityObj = this.config.entities.find(e => e.id === this._selectedSpeaker);
             const defaultVol = entityObj && entityObj.default_volume !== undefined ? entityObj.default_volume : 10;
-            const maxVol = entityObj && entityObj.max_volume !== undefined ? entityObj.max_volume : 100;
             const speakerState = hass.states[this._selectedSpeaker]?.attributes || {};
             if (speakerState.volume_level === undefined) {
                 slider.value = defaultVol;
                 tooltip.innerText = defaultVol;
-                this.setVolume(defaultVol / maxVol);
+                this.setVolume(defaultVol / 100);
             }
         });
 
@@ -213,8 +209,7 @@ class JukeboxCard extends HTMLElement {
     onChangeVolumeSlider(e) {
         const slider = e.currentTarget;
         const volPercentage = parseFloat(slider.value);
-        const maxVol = slider.max ? parseFloat(slider.max) : 100;
-        const vol = (volPercentage > 0 ? volPercentage / maxVol : 0);
+        const vol = (volPercentage > 0 ? volPercentage / 100 : 0);
         this.setVolume(vol);
     }
 
@@ -227,6 +222,10 @@ class JukeboxCard extends HTMLElement {
 
     onStop(e) {
         this.hass.callService('media_player', 'media_stop', {
+            entity_id: this._selectedSpeaker
+        });
+        // Also turn off the player to fully shut it down
+        this.hass.callService('media_player', 'turn_off', {
             entity_id: this._selectedSpeaker
         });
     }
@@ -336,14 +335,12 @@ class JukeboxCard extends HTMLElement {
     }
 
     changeVolumeStep(step) {
-        const entityObj = this.config.entities.find(e => e.id === this._selectedSpeaker);
-        const maxVol = entityObj && entityObj.max_volume !== undefined ? entityObj.max_volume : 100;
         const slider = this.content.querySelector('ha-slider');
         if (!slider) return;
         let newVal = Number(slider.value) + step;
         newVal = Math.max(slider.min, Math.min(slider.max, newVal));
         slider.value = newVal;
-        this.setVolume(newVal / maxVol);
+        this.setVolume(newVal / 100);
     }
 }
 
