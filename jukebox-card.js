@@ -22,11 +22,15 @@ class JukeboxCard extends HTMLElement {
     }
 
     buildSpeakerSwitches(hass) {
-        this._tabs = document.createElement('paper-tabs');
-        this._tabs.setAttribute('scrollable', true);
-        this._tabs.addEventListener('iron-activate', (e) => this.onSpeakerSelect(e.detail.item.entityId));
+        this._tabs = document.createElement('mwc-tab-bar');
+        this._tabs.setAttribute('activeIndex', 0);
+        this._tabs.addEventListener('MDCTabBar:activated', (e) => {
+            const idx = e.detail.index;
+            const entityId = this.config.entities[idx];
+            this.onSpeakerSelect(entityId);
+        });
 
-        this.config.entities.forEach(entityId => {
+        this.config.entities.forEach((entityId, idx) => {
             if (!hass.states[entityId]) {
                 console.log('Jukebox: No State for entity', entityId);
                 return;
@@ -37,7 +41,7 @@ class JukeboxCard extends HTMLElement {
         // automatically activate the first speaker that's playing
         const firstPlayingSpeakerIndex = this.findFirstPlayingIndex(hass);
         this._selectedSpeaker = this.config.entities[firstPlayingSpeakerIndex];
-        this._tabs.setAttribute('selected', firstPlayingSpeakerIndex);
+        this._tabs.activeIndex = firstPlayingSpeakerIndex;
 
         return this._tabs;
     }
@@ -215,11 +219,9 @@ class JukeboxCard extends HTMLElement {
 
     buildSpeakerSwitch(entityId, hass) {
         const entity = hass.states[entityId];
-
-        const btn = document.createElement('paper-tab');
-        btn.entityId = entityId;        
-        btn.innerText = hass.states[entityId].attributes.friendly_name;
-        return btn;
+        const tab = document.createElement('mwc-tab');
+        tab.label = entity.attributes.friendly_name;
+        return tab;
     }
 
     setConfig(config) {
