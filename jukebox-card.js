@@ -280,12 +280,8 @@ class JukeboxCard extends HTMLElement {
         const name = e.currentTarget.stationName;
         const data = {
             entity_id: this._selectedSpeaker,
-            media_content_type: 'cast',
-            media_content_id: JSON.stringify({
-                app_id: "379EE301",
-                media_id: e.currentTarget.stationUrl,
-                media_type: "audio/mp4"
-            }),
+            media_content_id: e.currentTarget.stationUrl,
+            media_content_type: 'audio/mp4',
             extra: {
                 metadata: {
                     metadataType: 3,
