@@ -290,7 +290,8 @@ class JukeboxCard extends HTMLElement {
                     images: [
                         { url: logo }
                     ]
-                }
+                },
+                app_id: "379EE301"  // Custom Google Cast app ID - DEV
             }
         };
         this.hass.callService('media_player', 'play_media', data);
