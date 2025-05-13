@@ -282,7 +282,7 @@ class JukeboxCard extends HTMLElement {
             entity_id: this._selectedSpeaker,
             media_content_type: 'cast',
             media_content_id: JSON.stringify({
-                app_name: "379EE301",
+                app_id: "379EE301",
                 media_id: e.currentTarget.stationUrl,
                 media_type: "audio/mp4"
             }),
