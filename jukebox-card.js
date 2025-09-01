@@ -1,462 +1,646 @@
 class JukeboxCard extends HTMLElement {
-    set hass(hass) {
-        if (!this.content) {
-            this._hassObservers = [];
-            this.appendChild(getStyle());
-            const card = document.createElement('ha-card');
-            this.content = document.createElement('div');
-            card.appendChild(this.content);
-            this.appendChild(card);
+  constructor() {
+    super();
+    this._hassObservers = [];
+    this.content = null;
+    this._selectedSpeaker = null;
+    this._stationButtons = [];
+    this._tabs = null;
+    this._powerButton = null;
+    this._powerIcon = null;
+    this._muteButton = null;
+    this._muteIcon = null;
+    this._slider = null;
+    this._stopButton = null;
+    this._stopIcon = null;
+    this._volumeDecreaseBtn = null;
+    this._volumeIncreaseBtn = null;
+    this._volumeDisplay = null;
+    this.config = {};
+    this._stationListExpanded = false;
+    this._stationListContainer = null;
+    this._toggleStationListButton = null;
+  }
 
-            this.content.appendChild(this.buildSpeakerSwitches(hass));
-            this.content.appendChild(this.buildVolumeSlider());
-            this.content.appendChild(this.buildStationList());
+  set hass(hass) {
+    if (!this.content) {
+      this._hassObservers = [];
+      this.appendChild(this.getStyle());
+      const card = document.createElement('ha-card');
+      this.content = document.createElement('div');
+      this.content.className = 'content';
+      card.appendChild(this.content);
+      this.appendChild(card);
+
+      this.content.appendChild(this.buildSpeakerSwitches(hass));
+      this.content.appendChild(this.buildVolumeSlider());
+      this.content.appendChild(this.buildStationList());
+    }
+
+    this._hass = hass;
+    this._hassObservers.forEach(listener => listener(hass));
+  }
+
+  get hass() {
+    return this._hass;
+  }
+
+  buildSpeakerSwitches(hass) {
+    this._tabs = document.createElement('div');
+    this._tabs.classList.add('tabs-container');
+    
+    this.config.entities.forEach((entityObj, idx) => {
+      const entityId = typeof entityObj === 'string' ? entityObj : entityObj.id;
+      if (!hass.states[entityId]) {
+        console.log('Jukebox: No State for entity', entityId);
+        return;
+      }
+      this._tabs.appendChild(this.buildSpeakerSwitch(entityId, hass));
+    });
+
+    const firstPlayingSpeakerIndex = this.findFirstPlayingIndex(hass);
+    this._selectedSpeaker = this.getEntityId(this.config.entities[firstPlayingSpeakerIndex]);
+    if (this._tabs.children[firstPlayingSpeakerIndex]) {
+      this._tabs.children[firstPlayingSpeakerIndex].classList.add('active');
+    }
+
+    return this._tabs;
+  }
+
+  buildStationList() {
+    this._stationButtons = [];
+    const stationListContainer = document.createElement('div');
+    stationListContainer.className = 'station-list-container';
+    this._stationListContainer = stationListContainer;
+
+    this._toggleStationListButton = document.createElement('button');
+    this._toggleStationListButton.className = 'toggle-stations-button';
+    this._toggleStationListButton.innerHTML = `
+      <ha-icon icon="mdi:chevron-down"></ha-icon>
+      <span>Radio Stations</span>
+    `;
+    this._toggleStationListButton.addEventListener('click', () => this.toggleStationList());
+    stationListContainer.appendChild(this._toggleStationListButton);
+
+    const stationList = document.createElement('div');
+    stationList.className = 'station-list';
+    stationList.hidden = true;
+
+    const gridContainer = document.createElement('div');
+    gridContainer.className = 'stations-grid';
+    stationList.appendChild(gridContainer);
+
+    this.config.links.forEach(linkCfg => {
+      const stationButton = this.buildStationSwitch(linkCfg.name, linkCfg.url, linkCfg.logo);
+      this._stationButtons.push(stationButton);
+      gridContainer.appendChild(stationButton);
+    });
+
+    stationListContainer.appendChild(stationList);
+    this._hassObservers.push(() => this.updateStationListVisibility());
+    this._hassObservers.push(this.updateStationButtonsState.bind(this));
+
+    return stationListContainer;
+  }
+
+  toggleStationList() {
+    this._stationListExpanded = !this._stationListExpanded;
+    this.updateStationListVisibility();
+  }
+
+  updateStationListVisibility() {
+    if (!this._stationListContainer || !this._toggleStationListButton) return;
+    
+    const stationList = this._stationListContainer.querySelector('.station-list');
+    const icon = this._toggleStationListButton.querySelector('ha-icon');
+    
+    stationList.hidden = !this._stationListExpanded;
+    icon.icon = this._stationListExpanded ? 'mdi:chevron-up' : 'mdi:chevron-down';
+    this._toggleStationListButton.classList.toggle('active', this._stationListExpanded);
+  }
+
+  buildVolumeSlider() {
+    const volumeContainer = document.createElement('div');
+    volumeContainer.className = 'volume-container';
+
+    this._powerButton = document.createElement('ha-icon-button');
+    this._powerIcon = document.createElement('ha-icon');
+    this._powerIcon.icon = 'mdi:power';
+    this._powerButton.appendChild(this._powerIcon);
+    this._powerButton.addEventListener('click', () => this.togglePower());
+
+    this._volumeDecreaseBtn = document.createElement('ha-icon-button');
+    const decreaseIcon = document.createElement('ha-icon');
+    decreaseIcon.icon = 'mdi:volume-minus';
+    this._volumeDecreaseBtn.appendChild(decreaseIcon);
+    this._volumeDecreaseBtn.addEventListener('click', () => this.adjustVolume(-5));
+
+    this._slider = document.createElement('ha-slider');
+    this._slider.min = 1;
+    this._slider.max = 100;
+    this._slider.addEventListener('change', (e) => this.onVolumeSliderChange(e));
+    this._slider.className = 'volume-slider';
+
+    this._volumeIncreaseBtn = document.createElement('ha-icon-button');
+    const increaseIcon = document.createElement('ha-icon');
+    increaseIcon.icon = 'mdi:volume-plus';
+    this._volumeIncreaseBtn.appendChild(increaseIcon);
+    this._volumeIncreaseBtn.addEventListener('click', () => this.adjustVolume(5));
+
+    this._volumeDisplay = document.createElement('div');
+    this._volumeDisplay.className = 'volume-display';
+    this._volumeDisplay.textContent = '0%';
+
+    this._muteButton = document.createElement('ha-icon-button');
+    this._muteIcon = document.createElement('ha-icon');
+    this._muteIcon.icon = 'mdi:volume-high';
+    this._muteButton.appendChild(this._muteIcon);
+    this._muteButton.isMute = false;
+    this._muteButton.addEventListener('click', () => this.onMuteUnmute());
+
+    this._stopButton = document.createElement('ha-icon-button');
+    this._stopIcon = document.createElement('ha-icon');
+    this._stopIcon.icon = 'mdi:stop';
+    this._stopButton.appendChild(this._stopIcon);
+    this._stopButton.setAttribute('disabled', true);
+    this._stopButton.addEventListener('click', () => this.onStop());
+
+    volumeContainer.appendChild(this._powerButton);
+    volumeContainer.appendChild(this._muteButton);
+    volumeContainer.appendChild(this._volumeDecreaseBtn);
+    volumeContainer.appendChild(this._slider);
+    volumeContainer.appendChild(this._volumeIncreaseBtn);
+    volumeContainer.appendChild(this._volumeDisplay);
+    volumeContainer.appendChild(this._stopButton);
+
+    this._hassObservers.push(hass => this.updateControls(hass));
+
+    return volumeContainer;
+  }
+
+  adjustVolume(change) {
+    if (!this._selectedSpeaker) return;
+    
+    const currentVolume = this._slider.value || 0;
+    let newVolume = parseInt(currentVolume) + change;
+    newVolume = Math.max(1, Math.min(100, newVolume));
+    
+    this._slider.value = newVolume;
+    this.setVolume(newVolume / 100);
+    this._volumeDisplay.textContent = `${newVolume}%`;
+  }
+
+  updateControls(hass) {
+    if (!this._selectedSpeaker || !hass.states[this._selectedSpeaker]) return;
+
+    const state = hass.states[this._selectedSpeaker];
+    const attrs = state.attributes;
+
+    const isOn = state.state !== 'off' && state.state !== 'unavailable' && state.state !== 'unknown';
+    this._powerButton.toggleAttribute('active', isOn);
+    this._powerIcon.icon = isOn ? 'mdi:power' : 'mdi:power';
+
+    const hasVolume = 'volume_level' in attrs;
+    this._slider.toggleAttribute('hidden', !hasVolume);
+    this._volumeDecreaseBtn.toggleAttribute('hidden', !hasVolume);
+    this._volumeIncreaseBtn.toggleAttribute('hidden', !hasVolume);
+    this._volumeDisplay.toggleAttribute('hidden', !hasVolume);
+    this._stopButton.toggleAttribute('hidden', !hasVolume);
+    this._muteButton.toggleAttribute('hidden', !('is_volume_muted' in attrs));
+
+    this._stopButton.disabled = state.state !== 'playing';
+    
+    if (hasVolume) {
+      const volumePercent = Math.round(attrs.volume_level * 100);
+      this._slider.value = volumePercent;
+      this._volumeDisplay.textContent = `${volumePercent}%`;
+    }
+
+    const isMuted = attrs.is_volume_muted;
+    this._muteIcon.icon = isMuted ? 'mdi:volume-off' : 'mdi:volume-high';
+    this._muteButton.isMute = isMuted;
+    this._slider.disabled = isMuted;
+  }
+
+  onVolumeSliderChange(e) {
+    const volPercentage = parseFloat(e.currentTarget.value);
+    this.setVolume(volPercentage / 100);
+    this._volumeDisplay.textContent = `${volPercentage}%`;
+  }
+
+  togglePower() {
+    const state = this.hass.states[this._selectedSpeaker];
+    if (!state) return;
+
+    const service = state.state === 'off' ? 'turn_on' : 'turn_off';
+    this.hass.callService('media_player', service, {
+      entity_id: this._selectedSpeaker
+    });
+  }
+
+  onSpeakerSelect(e) {
+    Array.from(this._tabs.children).forEach(tab => tab.classList.remove('active'));
+    e.currentTarget.classList.add('active');
+    this._selectedSpeaker = e.currentTarget.entityId;
+    this._hassObservers.forEach(listener => listener(this.hass));
+  }
+
+  onMuteUnmute() {
+    this.hass.callService('media_player', 'volume_mute', {
+      entity_id: this._selectedSpeaker,
+      is_volume_muted: !this._muteButton.isMute
+    });
+  }
+
+  onStop() {
+    this.hass.callService('media_player', 'media_stop', {
+      entity_id: this._selectedSpeaker
+    });
+    
+    // Also turn off the player to fully shut it down
+    this.hass.callService('media_player', 'turn_off', {
+      entity_id: this._selectedSpeaker
+    });
+  }
+
+  buildStationSwitch(name, url, logo) {
+    const btn = document.createElement('mwc-button');
+    btn.stationUrl = url;
+    btn.stationName = name;
+    btn.stationLogo = logo;
+    btn.className = 'juke-toggle';
+    
+    // Add logo image if present
+    if (logo) {
+      const img = document.createElement('img');
+      img.src = logo;
+      img.alt = name;
+      img.style.height = '20px';
+      img.style.width = '20px';
+      img.style.marginRight = '8px';
+      img.style.verticalAlign = 'middle';
+      img.style.borderRadius = '3px';
+      btn.appendChild(img);
+    }
+    
+    // Add station name
+    const span = document.createElement('span');
+    span.innerText = name;
+    btn.appendChild(span);
+    
+    btn.addEventListener('click', () => {
+      this._stationButtons.forEach(stationBtn => {
+        stationBtn.removeAttribute('active');
+        stationBtn.classList.remove('active');
+      });
+      btn.setAttribute('active', '');
+      btn.classList.add('active');
+      this.playStation(url, name, logo);
+    });
+    
+    return btn;
+  }
+
+  updateStationButtonsState(hass) {
+    let playingUrl = null;
+    const selectedSpeaker = this._selectedSpeaker;
+
+    if (hass.states[selectedSpeaker] && hass.states[selectedSpeaker].state === 'playing') {
+      playingUrl = hass.states[selectedSpeaker].attributes.media_content_id;
+    }
+
+    this._stationButtons.forEach(stationBtn => {
+      const isActive = stationBtn.stationUrl === playingUrl;
+      stationBtn.toggleAttribute('active', isActive);
+      stationBtn.classList.toggle('active', isActive);
+    });
+  }
+
+  playStation(url, name, logo) {
+    const data = {
+      entity_id: this._selectedSpeaker,
+      media_content_id: url,
+      media_content_type: 'audio/mp4'
+    };
+    
+    // Add metadata if we have a name/logo
+    if (name || logo) {
+      data.extra = {
+        metadata: {
+          metadataType: 3,
+          title: name || "Radio Station",
+          artist: "Live Radio",
+          images: logo ? [{ url: logo }] : []
         }
-
-        this._hass = hass;
-        this._hassObservers.forEach(listener => listener(hass));
+      };
     }
+    
+    this.hass.callService('media_player', 'play_media', data);
+  }
 
-    get hass() {
-        return this._hass;
+  setVolume(value) {
+    this.hass.callService('media_player', 'volume_set', {
+      entity_id: this._selectedSpeaker,
+      volume_level: value
+    });
+  }
+
+  getEntityId(entityConfig) {
+    return typeof entityConfig === 'string' ? entityConfig : entityConfig.id;
+  }
+
+  findFirstPlayingIndex(hass) {
+    return Math.max(0, this.config.entities.findIndex(entityObj => {
+      const entityId = this.getEntityId(entityObj);
+      return hass.states[entityId] && hass.states[entityId].state === 'playing';
+    }));
+  }
+
+  buildSpeakerSwitch(entityId, hass) {
+    const btn = document.createElement('button');
+    btn.entityId = entityId;
+    btn.classList.add('speaker-tab');
+    btn.textContent = hass.states[entityId].attributes.friendly_name || entityId;
+    
+    btn.addEventListener('click', (e) => this.onSpeakerSelect(e));
+    
+    let longPressTimer;
+    const longPressDelay = 500;
+    
+    btn.addEventListener('touchstart', () => {
+      longPressTimer = setTimeout(() => {
+        this.openSpeakerMoreInfo(entityId);
+      }, longPressDelay);
+    });
+    
+    btn.addEventListener('touchend', () => {
+      clearTimeout(longPressTimer);
+    });
+    
+    btn.addEventListener('mousedown', (e) => {
+      if (e.button === 0) {
+        longPressTimer = setTimeout(() => {
+          this.openSpeakerMoreInfo(entityId);
+        }, longPressDelay);
+      }
+    });
+    
+    btn.addEventListener('mouseup', () => {
+      clearTimeout(longPressTimer);
+    });
+    
+    btn.addEventListener('mouseleave', () => {
+      clearTimeout(longPressTimer);
+    });
+    
+    return btn;
+  }
+
+  openSpeakerMoreInfo(entityId) {
+    const event = new Event('hass-more-info', {
+      bubbles: true,
+      composed: true
+    });
+    event.detail = { entityId };
+    this.dispatchEvent(event);
+  }
+
+  setConfig(config) {
+    if (!config.entities) {
+      throw new Error('You need to define your media player entities');
     }
-
-    buildSpeakerSwitches(hass) {
-        const container = document.createElement('div');
-        container.className = 'speaker-switches';
-        this._speakerButtons = [];
-
-        this.config.entities.forEach((entityObj, idx) => {
-            const entityId = entityObj.id;
-            if (!hass.states[entityId]) return;
-            const name = hass.states[entityId].attributes.friendly_name || entityId;
-            const btn = document.createElement('mwc-button');
-            btn.innerText = name;
-            btn.className = 'speaker-btn';
-            btn.addEventListener('click', () => {
-                this.onSpeakerSelect(entityId);
-                this._speakerButtons.forEach(b => b.removeAttribute('raised'));
-                btn.setAttribute('raised', '');
-            });
-            if (!this._selectedSpeaker && idx === 0) {
-                btn.setAttribute('raised', '');
-            }
-            this._speakerButtons.push(btn);
-            container.appendChild(btn);
-        });
-
-        // Highlight the first playing speaker or the first one
-        const firstPlayingSpeakerIndex = this.findFirstPlayingIndex(hass);
-        this._selectedSpeaker = this.config.entities[firstPlayingSpeakerIndex].id;
-        if (this._speakerButtons[firstPlayingSpeakerIndex]) {
-            this._speakerButtons.forEach(b => b.removeAttribute('raised'));
-            this._speakerButtons[firstPlayingSpeakerIndex].setAttribute('raised', '');
-        }
-
-        return container;
+    if (!config.links) {
+      throw new Error('You need to define your radio station links');
     }
+    
+    // Support both array of strings and array of objects for entities
+    this.config = { ...config };
+    this.config.entities = config.entities.map(e => {
+      if (typeof e === 'string') {
+        return { id: e };
+      }
+      return e;
+    });
+  }
 
-    buildStationList() {
-        this._stationButtons = [];
+  getCardSize() {
+    return 3;
+  }
 
-        const stationList = document.createElement('div');
-        stationList.classList.add('station-list');
-
-        this.config.links.forEach(linkCfg => {
-            const stationButton = this.buildStationSwitch(linkCfg.name, linkCfg.url, linkCfg.logo);
-            this._stationButtons.push(stationButton);
-            stationList.appendChild(stationButton);
-        });
-
-        // make sure the update method is notified of a change
-        this._hassObservers.push(this.updateStationSwitchStates.bind(this));
-
-        return stationList;
-    }
-
-    buildVolumeSlider() {
-        const volumeContainer = document.createElement('div');
-        volumeContainer.className = 'volume center horizontal layout';
-
-        const muteButton = document.createElement('ha-icon-button');
-        muteButton.icon = 'hass:volume-high';
-        muteButton.isMute = false;
-        muteButton.addEventListener('click', this.onMuteUnmute.bind(this));
-        const mbIcon = document.createElement('ha-icon');
-        mbIcon.icon = 'hass:volume-high';
-        muteButton.appendChild(mbIcon);
-
-        // Step buttons
-        const minusBtn = document.createElement('mwc-button');
-        minusBtn.innerText = '-';
-        minusBtn.className = 'vol-step-btn';
-        minusBtn.addEventListener('click', () => this.changeVolumeStep(-1));
-        const plusBtn = document.createElement('mwc-button');
-        plusBtn.innerText = '+';
-        plusBtn.className = 'vol-step-btn';
-        plusBtn.addEventListener('click', () => this.changeVolumeStep(1));
-
-        const slider = document.createElement('ha-slider');
-        slider.className = 'flex';
-        slider.min = 0;
-        slider.max = 100;
-        slider.step = 1;
-        slider.addEventListener('change', this.onChangeVolumeSlider.bind(this));
-
-        // Tooltip for current volume
-        const tooltip = document.createElement('div');
-        tooltip.className = 'vol-tooltip';
-        tooltip.style.display = 'none';
-        tooltip.innerText = '0';
-        volumeContainer.appendChild(tooltip);
-
-        // Show tooltip on drag or hover
-        function updateTooltipPosition() {
-            const rect = slider.getBoundingClientRect();
-            const percent = (slider.value - slider.min) / (slider.max - slider.min);
-            const left = rect.left + percent * rect.width;
-            tooltip.style.left = `${left - rect.left}px`;
-        }
-        slider.addEventListener('input', () => {
-            tooltip.innerText = slider.value;
-            tooltip.style.display = 'block';
-            updateTooltipPosition();
-        });
-        slider.addEventListener('mousedown', () => {
-            tooltip.style.display = 'block';
-            updateTooltipPosition();
-        });
-        slider.addEventListener('touchstart', () => {
-            tooltip.style.display = 'block';
-            updateTooltipPosition();
-        });
-        slider.addEventListener('mouseup', () => {
-            tooltip.style.display = 'none';
-        });
-        slider.addEventListener('touchend', () => {
-            tooltip.style.display = 'none';
-        });
-        slider.addEventListener('mouseleave', () => {
-            tooltip.style.display = 'none';
-        });
-        slider.addEventListener('mousemove', () => {
-            if (tooltip.style.display === 'block') updateTooltipPosition();
-        });
-
-        const stopButton = document.createElement('ha-icon-button');
-        stopButton.icon = 'hass:stop';
-        stopButton.setAttribute('disabled', true);
-        stopButton.addEventListener('click', this.onStop.bind(this));
-        const sbIcon = document.createElement('ha-icon');
-        sbIcon.icon = 'hass:stop';
-        stopButton.appendChild(sbIcon);
-
-        this._hassObservers.push(hass => {
-            if (!this._selectedSpeaker) return;
-            const speakerState = hass.states[this._selectedSpeaker]?.attributes || {};
-            // no speaker level? then hide mute button, volume, and step buttons
-            if (!speakerState.hasOwnProperty('volume_level')) {
-                slider.setAttribute('hidden', true);
-                minusBtn.setAttribute('hidden', true);
-                plusBtn.setAttribute('hidden', true);
-                stopButton.setAttribute('hidden', true);
-            } else {
-                slider.removeAttribute('hidden');
-                minusBtn.removeAttribute('hidden');
-                plusBtn.removeAttribute('hidden');
-                stopButton.removeAttribute('hidden');
-            }
-            if (!speakerState.hasOwnProperty('is_volume_muted')) {
-                muteButton.setAttribute('hidden', true);
-            } else {
-                muteButton.removeAttribute('hidden');
-            }
-            if (hass.states[this._selectedSpeaker].state === 'playing') {
-                stopButton.removeAttribute('disabled');
-            } else {
-                stopButton.setAttribute('disabled', true);
-            }
-            slider.value = speakerState.volume_level ? Math.round(speakerState.volume_level * 100) : 0;
-            tooltip.innerText = slider.value;
-        });
-
-        // Set default volume on speaker select
-        this._hassObservers.push(hass => {
-            if (!this._selectedSpeaker) return;
-            const entityObj = this.config.entities.find(e => e.id === this._selectedSpeaker);
-            const defaultVol = entityObj && entityObj.default_volume !== undefined ? entityObj.default_volume : 10;
-            const speakerState = hass.states[this._selectedSpeaker]?.attributes || {};
-            if (speakerState.volume_level === undefined) {
-                slider.value = defaultVol;
-                tooltip.innerText = defaultVol;
-                this.setVolume(defaultVol / 100);
-            }
-        });
-
-        volumeContainer.appendChild(muteButton);
-        volumeContainer.appendChild(minusBtn);
-        volumeContainer.appendChild(slider);
-        volumeContainer.appendChild(plusBtn);
-        volumeContainer.appendChild(stopButton);
-        return volumeContainer;
-    }
-
-    onSpeakerSelect(entityId) {
-        this._selectedSpeaker = entityId;
-        this._hassObservers.forEach(listener => listener(this.hass));
-    }
-
-    onChangeVolumeSlider(e) {
-        const slider = e.currentTarget;
-        const volPercentage = parseFloat(slider.value);
-        const vol = (volPercentage > 0 ? volPercentage / 100 : 0);
-        this.setVolume(vol);
-    }
-
-    onMuteUnmute(e) {
-        this.hass.callService('media_player', 'volume_mute', {
-            entity_id: this._selectedSpeaker,
-            is_volume_muted: !e.currentTarget.isMute
-        });
-    }
-
-    onStop(e) {
-        this.hass.callService('media_player', 'media_stop', {
-            entity_id: this._selectedSpeaker
-        });
-        // Also turn off the player to fully shut it down
-        this.hass.callService('media_player', 'turn_off', {
-            entity_id: this._selectedSpeaker
-        });
-    }
-
-    updateStationSwitchStates(hass) {
-        let playingUrl = null;
-        const selectedSpeaker = this._selectedSpeaker;
-
-        if (hass.states[selectedSpeaker] && hass.states[selectedSpeaker].state === 'playing') {
-            playingUrl = hass.states[selectedSpeaker].attributes.media_content_id;
-        }
-
-        this._stationButtons.forEach(stationSwitch => {
-            if (stationSwitch.hasAttribute('raised') && stationSwitch.stationUrl !== playingUrl) {
-                stationSwitch.removeAttribute('raised');
-                return;
-            }
-            if (!stationSwitch.hasAttribute('raised') && stationSwitch.stationUrl === playingUrl) {
-                stationSwitch.setAttribute('raised', true);
-            }
-        })
-    }
-
-    buildStationSwitch(name, url, logo) {
-        const btn = document.createElement('mwc-button');
-        btn.stationUrl = url;
-        btn.stationName = name;
-        btn.stationLogo = logo;
-        btn.className = 'juke-toggle';
-        // Add logo image if present
-        if (logo) {
-            const img = document.createElement('img');
-            img.src = logo;
-            img.alt = name;
-            img.style.height = '20px';
-            img.style.width = '20px';
-            img.style.verticalAlign = 'middle';
-            img.style.marginRight = '8px';
-            btn.appendChild(img);
-        }
-        // Add station name
-        const span = document.createElement('span');
-        span.innerText = name;
-        btn.appendChild(span);
-        btn.addEventListener('click', this.onStationSelect.bind(this));
-        return btn;
-    }
-
-    onStationSelect(e) {
-        // Support logo/metadata for play_media
-        const logo = e.currentTarget.stationLogo;
-        const name = e.currentTarget.stationName;
-        const data = {
-            entity_id: this._selectedSpeaker,
-            media_content_id: e.currentTarget.stationUrl,
-            media_content_type: 'audio/mp4',
-            extra: {
-                metadata: {
-                    metadataType: 3,
-                    title: name,
-                    artist: "Live Radio",
-                    images: [
-                        { url: logo }
-                    ]
-                }
-            }
-        };
-        this.hass.callService('media_player', 'play_media', data);
-    }
-
-    setVolume(value) {
-        this.hass.callService('media_player', 'volume_set', {
-            entity_id: this._selectedSpeaker,
-            volume_level: value
-        });
-    }
-
-    /***
-     * returns the numeric index of the first entity in a "Playing" state, or 0 (first index).
-     *
-     * @param hass
-     * @returns {number}
-     * @private
-     */
-    findFirstPlayingIndex(hass) {
-        return Math.max(0, this.config.entities.findIndex(entityObj => {
-            return hass.states[entityObj.id] && hass.states[entityObj.id].state === 'playing';
-        }));
-    }
-
-    setConfig(config) {
-        if (!config.entities) {
-            throw new Error('You need to define your media player entities');
-        }
-        // Support both array of strings and array of objects for entities
-        this.config = { ...config };
-        this.config.entities = config.entities.map(e => {
-            if (typeof e === 'string') {
-                return { id: e };
-            }
-            return e;
-        });
-    }
-
-    getCardSize() {
-        return 3;
-    }
-
-    changeVolumeStep(step) {
-        const slider = this.content.querySelector('ha-slider');
-        if (!slider) return;
-        let newVal = Number(slider.value) + step;
-        newVal = Math.max(slider.min, Math.min(slider.max, newVal));
-        slider.value = newVal;
-        this.setVolume(newVal / 100);
-    }
-}
-
-function getStyle() {
-    const frag = document.createDocumentFragment();
-
-    const included = document.createElement('style');
-    included.setAttribute('include', 'iron-flex iron-flex-alignment');
-
-    const ownStyle = document.createElement('style');
-    ownStyle.innerHTML = `
-    .layout.horizontal, .layout.vertical {
-        display: -ms-flexbox;
-        display: -webkit-flex;
+  getStyle() {
+    const style = document.createElement('style');
+    style.textContent = `
+      ha-card {
         display: flex;
-    }
-    
-    .layout.horizontal {
-        -ms-flex-direction: row;
-        -webkit-flex-direction: row;
-        flex-direction: row;
-    }
-    
-    .layout.center, .layout.center-center {
-        -ms-flex-align: center;
-        -webkit-align-items: center;
-        align-items: center;
-    }
-    
-    .flex {
-        ms-flex: 1 1 0.000000001px;
-        -webkit-flex: 1;
-        flex: 1;
-        -webkit-flex-basis: 0.000000001px;
-        flex-basis: 0.000000001px;
-    }
-    
-    [hidden] {
-        display: none !important;
-    }
-    
-    .volume {
-        padding: 10px 20px;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+        padding: 6px;
+      }
+
+      .content {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+        gap: 4px;               
+      }
+
+      .tabs-container {
+        display: flex;
+        background-color: rgba(128, 128, 128, 0.1);
+        color: var(--text-primary-color);
+        overflow-x: auto;
+        flex-shrink: 0;
+        border-radius: 4px;
+      }
+     
+      .speaker-tab {            
+        padding: 8px 12px;
+        border: none;
+        background: none;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+        white-space: nowrap;
+        position: relative;
+        font-size: 0.9rem;
+      }
+      
+      .speaker-tab.active {
+        background-color: rgba(128, 128, 128, 0.4); 
+      }
+      
+      .speaker-tab.active::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background-color: var(--text-primary-color);
+      }
+
+      .volume-container {
         display: flex;
         align-items: center;
+        padding: 8px 12px;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+
+      .volume-slider {
+        flex-grow: 1;
+        margin: 0 4px;
+      }
+
+      .volume-display {
+        min-width: 40px;
+        text-align: center;
+        font-size: 0.9em;
+        color: var(--secondary-text-color);
+      }
+
+      .station-list-container {
+        width: 100%;
+        margin-top: 8px;
+      }
+
+      .toggle-stations-button {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        padding: 8px 12px;
+        background-color: rgba(128,128,128, 0.4);
+        border: none;
+        border-radius: 4px;
+        color: var(--primary-text-color);
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .toggle-stations-button:hover {
+        background-color: rgba(128,128,128,0.4);
+      }
+
+      .toggle-stations-button.active {
+        background-color: rgba(128, 128, 128, 0.3);
+      }
+
+      .toggle-stations-button ha-icon {
+        margin-right: 8px;
+        transition: transform 0.3s;
+      }
+
+      .station-list {
+        margin-top: 8px;
+        transition: all 0.3s ease;
+        overflow: hidden;
+      }
+
+      .station-list[hidden] {
+        display: none;
+      }
+
+      .station-list {
+        opacity: 1;
+        max-height: 1000px;
+        transition: opacity 0.3s ease, max-height 0.3s ease;
+      }
+
+      .station-list[hidden] {
+        opacity: 0;
+        max-height: 0;
+      }
+
+      .stations-grid {
+        display: flex;
+        flex-wrap: wrap;
         gap: 8px;
-    }
-    
-    mwc-button.juke-toggle {
+        padding: 8px;
+        width: 100%;
+      }
+
+      .juke-toggle {
         --mdc-theme-primary: var(--primary-text-color);
-    }
-    
-    mwc-button.juke-toggle[raised] {
+        --mdc-theme-on-primary: var(--primary-text-color);
+        --mdc-theme-on-surface: var(--primary-text-color);
+        --mdc-typography-button-font-size: 0.75rem;
+        --mdc-button-horizontal-padding: 12px;
+        --mdc-button-height: 32px;
+        flex: 0 0 auto;
+        width: auto;
+        min-width: 80px;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        transition: all 0.2s ease;
+        border: 2px solid transparent;
+      }
+
+      .juke-toggle.active,
+      .juke-toggle[active] {
         --mdc-theme-primary: var(--primary-color);
-        background-color: var(--primary-color);
-        color: var(--text-primary-color);
-    }
-    
-    paper-tabs {
-        background-color: var(--primary-color);
-        color: var(--text-primary-color);
-        --paper-tabs-selection-bar-color: var(--text-primary-color, #FFF);
-    }
-            
-    .speaker-switches {
-        margin: 10px;
-    }
-    
-    .speaker-btn {
-        margin: 0 4px 0 0;
-        padding: 0 8px;
-        min-width: 0;
-    }
-            
-    mwc-button.juke-toggle img {
+        --mdc-theme-on-primary: var(--text-primary-color);
+        background-color: var(--primary-color) !important;
+        border-color: var(--primary-color);
+        transform: scale(0.98);
+        box-shadow: 0 2px 8px rgba(var(--rgb-primary-color), 0.3);
+      }
+      
+      .juke-toggle:hover {
+        border-color: var(--primary-color);
+        transform: translateY(-1px);
+      }
+
+      .juke-toggle:active {
+        transform: scale(0.95);
+      }
+
+      .juke-toggle.active::before,
+      .juke-toggle[active]::before {
+        content: '▶';
+        margin-right: 4px;
+        font-size: 0.8em;
+      }
+
+      .juke-toggle img {
         border-radius: 3px;
         background: #222;
-    }
-    
-    .volume .vol-step-btn {
-        min-width: 32px;
-        padding: 0 4px;
-        margin: 0 2px;
-        color: #fff !important;
-        font-weight: bold !important;
-        font-size: 1.3em;
-        background: none;
-        box-shadow: none;
-    }
-    .volume .vol-step-btn[raised] {
-        background: var(--primary-color);
-        color: var(--text-primary-color) !important;
-    }
-    .volume ha-icon-button {
-        margin-right: 4px;
-    }
-    .volume ha-slider {
-        margin: 0 8px;
-    }
-    .vol-tooltip {
-        position: absolute;
-        top: -28px;
-        background: #222;
-        color: #fff;
-        padding: 2px 8px;
-        border-radius: 6px;
-        font-size: 1em;
-        pointer-events: none;
-        z-index: 10;
-        transition: left 0.05s;
-    }
-    `;
+      }
 
-    frag.appendChild(included);
-    frag.appendChild(ownStyle);
-    return frag;
+      @media (max-width: 600px) {
+        .stations-grid {
+          gap: 6px;
+        }
+        
+        .juke-toggle {
+          --mdc-typography-button-font-size: 0.7rem;
+          --mdc-button-height: 28px;
+          --mdc-button-horizontal-padding: 8px;
+          min-width: 70px;
+          max-width: 150px;
+        }
+      }
+
+      ha-icon-button {
+        --mdc-icon-button-size: 26px;
+        --mdc-icon-size: 26px;
+        color: var(--secondary-text-color);
+      }
+
+      ha-icon-button[active] {
+        color: var(--primary-color);
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+    `;
+    return style;
+  }
 }
 
 customElements.define('jukebox-card', JukeboxCard);
