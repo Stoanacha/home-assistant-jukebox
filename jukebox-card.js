@@ -104,7 +104,7 @@ class JukeboxCard extends HTMLElement {
     const decreaseIcon = document.createElement('ha-icon');
     decreaseIcon.icon = 'mdi:volume-minus';
     this._volumeDecreaseBtn.appendChild(decreaseIcon);
-    this._volumeDecreaseBtn.addEventListener('click', () => this.adjustVolume(-5));
+    this._volumeDecreaseBtn.addEventListener('click', () => this.adjustVolume(-1));
 
     this._slider = document.createElement('ha-slider');
     this._slider.min = 1;
@@ -116,7 +116,7 @@ class JukeboxCard extends HTMLElement {
     const increaseIcon = document.createElement('ha-icon');
     increaseIcon.icon = 'mdi:volume-plus';
     this._volumeIncreaseBtn.appendChild(increaseIcon);
-    this._volumeIncreaseBtn.addEventListener('click', () => this.adjustVolume(5));
+    this._volumeIncreaseBtn.addEventListener('click', () => this.adjustVolume(1));
 
     this._volumeDisplay = document.createElement('div');
     this._volumeDisplay.className = 'volume-display';
