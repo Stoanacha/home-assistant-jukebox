@@ -17,9 +17,6 @@ class JukeboxCard extends HTMLElement {
     this._volumeIncreaseBtn = null;
     this._volumeDisplay = null;
     this.config = {};
-    this._stationListExpanded = false;
-    this._stationListContainer = null;
-    this._toggleStationListButton = null;
   }
 
   set hass(hass) {
@@ -71,52 +68,26 @@ class JukeboxCard extends HTMLElement {
     this._stationButtons = [];
     const stationListContainer = document.createElement('div');
     stationListContainer.className = 'station-list-container';
-    this._stationListContainer = stationListContainer;
-
-    this._toggleStationListButton = document.createElement('button');
-    this._toggleStationListButton.className = 'toggle-stations-button';
-    this._toggleStationListButton.innerHTML = `
-      <ha-icon icon="mdi:chevron-down"></ha-icon>
-      <span>Radio Stations</span>
-    `;
-    this._toggleStationListButton.addEventListener('click', () => this.toggleStationList());
-    stationListContainer.appendChild(this._toggleStationListButton);
-
-    const stationList = document.createElement('div');
-    stationList.className = 'station-list';
-    stationList.hidden = true;
-
+    
+    // Header mit Radio-Icon
+    const header = document.createElement('div');
+    header.className = 'station-list-header';
+    header.innerHTML = '<ha-icon icon="mdi:radio"></ha-icon><span>Radio Stations</span>';
+    stationListContainer.appendChild(header);
+    
+    // Stationsliste immer sichtbar
     const gridContainer = document.createElement('div');
     gridContainer.className = 'stations-grid';
-    stationList.appendChild(gridContainer);
-
+    stationListContainer.appendChild(gridContainer);
+    
     this.config.links.forEach(linkCfg => {
       const stationButton = this.buildStationSwitch(linkCfg.name, linkCfg.url, linkCfg.logo);
       this._stationButtons.push(stationButton);
       gridContainer.appendChild(stationButton);
     });
-
-    stationListContainer.appendChild(stationList);
-    this._hassObservers.push(() => this.updateStationListVisibility());
+    
     this._hassObservers.push(this.updateStationButtonsState.bind(this));
-
     return stationListContainer;
-  }
-
-  toggleStationList() {
-    this._stationListExpanded = !this._stationListExpanded;
-    this.updateStationListVisibility();
-  }
-
-  updateStationListVisibility() {
-    if (!this._stationListContainer || !this._toggleStationListButton) return;
-    
-    const stationList = this._stationListContainer.querySelector('.station-list');
-    const icon = this._toggleStationListButton.querySelector('ha-icon');
-    
-    stationList.hidden = !this._stationListExpanded;
-    icon.icon = this._stationListExpanded ? 'mdi:chevron-up' : 'mdi:chevron-down';
-    this._toggleStationListButton.classList.toggle('active', this._stationListExpanded);
   }
 
   buildVolumeSlider() {
@@ -448,9 +419,9 @@ class JukeboxCard extends HTMLElement {
 
       .tabs-container {
         display: flex;
+        flex-wrap: wrap;
         background-color: rgba(128, 128, 128, 0.1);
         color: var(--text-primary-color);
-        overflow-x: auto;
         flex-shrink: 0;
         border-radius: 4px;
       }
@@ -505,60 +476,27 @@ class JukeboxCard extends HTMLElement {
         width: 100%;
         margin-top: 8px;
       }
-
-      .toggle-stations-button {
+      
+      .station-list-header {
         display: flex;
         align-items: center;
-        width: 100%;
         padding: 8px 12px;
         background-color: rgba(128,128,128, 0.4);
-        border: none;
         border-radius: 4px;
         color: var(--primary-text-color);
         font-size: 0.9rem;
-        cursor: pointer;
-        transition: all 0.3s ease;
+        margin-bottom: 8px;
       }
 
-      .toggle-stations-button:hover {
-        background-color: rgba(128,128,128,0.4);
-      }
-
-      .toggle-stations-button.active {
-        background-color: rgba(128, 128, 128, 0.3);
-      }
-
-      .toggle-stations-button ha-icon {
+      .station-list-header ha-icon {
         margin-right: 8px;
-        transition: transform 0.3s;
-      }
-
-      .station-list {
-        margin-top: 8px;
-        transition: all 0.3s ease;
-        overflow: hidden;
-      }
-
-      .station-list[hidden] {
-        display: none;
-      }
-
-      .station-list {
-        opacity: 1;
-        max-height: 1000px;
-        transition: opacity 0.3s ease, max-height 0.3s ease;
-      }
-
-      .station-list[hidden] {
-        opacity: 0;
-        max-height: 0;
       }
 
       .stations-grid {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
-        padding: 8px;
+        padding: 8px 4px;
         width: 100%;
       }
 
